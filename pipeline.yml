@@ -1,0 +1,219 @@
+variables:
+  NUGET_XMLDOC_MODE: skip
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+trigger: 
+- main
+
+stages:
+- stage: build
+  displayName: Build
+  variables:
+  - name: storageAccount
+    value: 'pizsessteststorage'
+  - name: resourceGroupName
+    value: 'TestDeploymentDemo'
+  - name: azureSubscription
+    value: 'DeploymentDemoServiceConnection'
+  - name: environment
+    value: 'test'
+  jobs:
+  - job: build_arm_template
+    displayName: Build the ARM Template
+    pool:
+      name: 'Azure Pipelines'
+      vmImage: 'windows-2019'
+    steps:
+    - template: pipeline/deploy-prerequisites.yml
+      parameters:
+        resourceGroupName: ${{variables.resourceGroupName}}
+        azureSubscription: ${{variables.azureSubscription}}
+        storageAccount: ${{variables.storageAccount}}
+
+    - template: pipeline/build-arm-template.yml
+      parameters:
+        resourceGroupName: ${{variables.resourceGroupName}}
+        azureSubscription: ${{variables.azureSubscription}}
+        csmParametersFile: azuredeploy.${{variables.environment}}.parameters.json
+        storageAccount: ${{variables.storageAccount}}
+
+  - job: build_api_project
+    displayName: Build the API Project
+    pool:
+      name: 'Azure Pipelines'
+      vmImage: 'windows-2019'
+    steps:
+    - template: pipeline/build-webapi.yml
+      parameters:
+        projectName: 'src/Demo.Api/Demo.Api.csproj'
+
+  - job: build_migrations_package
+    displayName: Build database migrations package
+    pool:
+      name: 'Azure Pipelines'
+      vmImage: 'windows-2019'
+    steps:
+    - template: pipeline/build-migration.yml
+
+- stage: test
+  displayName: "Deploy to Test"
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  dependsOn:
+  - build
+  variables:
+  - name: storageAccount
+    value: 'pizsessteststorage'
+  - name: resourceGroupName
+    value: 'TestDeploymentDemo'
+  - name: azureSubscription
+    value: 'DeploymentDemoServiceConnection'
+  - name: environment
+    value: 'test'
+  jobs:
+  - job: test_arm_deployment_incremental
+    displayName: Deploy ARM Incremental
+    pool:
+      name: 'Azure Pipelines'
+      vmImage: 'windows-2019'
+    steps:
+    - template: pipeline/deploy-arm.yml
+      parameters:
+        resourceGroupName: ${{variables.resourceGroupName}}
+        azureSubscription: ${{variables.azureSubscription}}
+        csmParametersFile: azuredeploy.${{variables.environment}}.parameters.json
+        storageAccount: ${{variables.storageAccount}}
+        azureDeployTimeKeyVaultName: 'DeployTimeKeyVault'
+        azureDeployTimeKeyVaultSubscription: 'DeployTime'
+        deploymentMode: 'Incremental'
+
+  - job: test_deploy_api
+    displayName: Deploy API
+    dependsOn:
+      - test_arm_deployment_incremental
+    pool:
+      name: 'Azure Pipelines'
+      vmImage: 'windows-2019'
+    steps:
+    - template: pipeline/deploy-webapi.yml
+      parameters:
+        azureSubscription: ${{variables.azureSubscription}}
+        webAppName: 'pizsess-test-app'    
+
+  - job: test_migrate_database
+    displayName: Migrate database
+    dependsOn:
+      - test_arm_deployment_incremental
+    pool:
+      name: 'Azure Pipelines'
+      vmImage: 'windows-2019'
+    steps:
+    - template: pipeline/migrate-database.yml
+      parameters:
+        resourceGroupName: ${{variables.resourceGroupName}}
+        azureSubscription: ${{variables.azureSubscription}}
+        azureDeployTimeKeyVaultName: 'DeployTimeKeyVault'
+        azureDeployTimeKeyVaultSubscription: 'DeployTime'
+
+  - job: test_arm_deployment_complete
+    displayName: Deploy ARM Complete
+    dependsOn:
+      - test_deploy_api
+      - test_migrate_database
+    pool:
+      name: 'Azure Pipelines'
+      vmImage: 'windows-2019'
+    steps:
+    - template: pipeline/deploy-arm.yml
+      parameters:
+        resourceGroupName: ${{variables.resourceGroupName}}
+        azureSubscription: ${{variables.azureSubscription}}
+        csmParametersFile: azuredeploy.${{variables.environment}}.parameters.json
+        storageAccount: ${{variables.storageAccount}}
+        azureDeployTimeKeyVaultName: 'DeployTimeKeyVault'
+        azureDeployTimeKeyVaultSubscription: 'DeployTime'
+        deploymentMode: 'Complete'  
+
+
+- stage: production
+  displayName: "Deploy to Production"
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  dependsOn:
+  - test
+  variables:
+  - name: storageAccount
+    value: 'confooprodstorage'
+  - name: resourceGroupName
+    value: 'ProdDeploymentDemo'
+  - name: azureSubscription
+    value: 'DeploymentDemoProd'
+  - name: environment
+    value: 'prod'
+  jobs:
+  - job: prod_arm_deployment_incremental
+    displayName: Deploy ARM Incremental
+    pool:
+      name: 'Azure Pipelines'
+      vmImage: 'windows-2019'
+    steps:
+    - template: pipeline/deploy-prerequisites.yml
+      parameters:
+        resourceGroupName: ${{variables.resourceGroupName}}
+        azureSubscription: ${{variables.azureSubscription}}
+        storageAccount: ${{variables.storageAccount}}
+
+    - template: pipeline/deploy-arm.yml
+      parameters:
+        resourceGroupName: ${{variables.resourceGroupName}}
+        azureSubscription: ${{variables.azureSubscription}}
+        csmParametersFile: azuredeploy.${{variables.environment}}.parameters.json
+        storageAccount: ${{variables.storageAccount}}
+        azureDeployTimeKeyVaultName: 'DeployTimeKeyVault'
+        azureDeployTimeKeyVaultSubscription: 'DeployTime'
+        deploymentMode: 'Incremental'
+
+  - job: prod_deploy_api
+    displayName: Deploy API
+    dependsOn:
+      - prod_arm_deployment_incremental
+    pool:
+      name: 'Azure Pipelines'
+      vmImage: 'windows-2019'
+    steps:
+    - template: pipeline/deploy-webapi.yml
+      parameters:
+        azureSubscription: ${{variables.azureSubscription}}
+        webAppName: 'pizsess-prod-app'    
+
+  - job: prod_migrate_database
+    displayName: Migrate database
+    dependsOn:
+      - prod_arm_deployment_incremental
+    pool:
+      name: 'Azure Pipelines'
+      vmImage: 'windows-2019'
+    steps:
+    - template: pipeline/migrate-database.yml
+      parameters:
+        resourceGroupName: ${{variables.resourceGroupName}}
+        azureSubscription: ${{variables.azureSubscription}}
+        azureDeployTimeKeyVaultName: 'DeployTimeKeyVault'
+        azureDeployTimeKeyVaultSubscription: 'DeployTime'
+
+  - job: prod_arm_deployment_complete
+    displayName: Deploy ARM Complete
+    dependsOn:
+      - prod_deploy_api
+      - prod_migrate_database
+    pool:
+      name: 'Azure Pipelines'
+      vmImage: 'windows-2019'
+    steps:
+    - template: pipeline/deploy-arm.yml
+      parameters:
+        resourceGroupName: ${{variables.resourceGroupName}}
+        azureSubscription: ${{variables.azureSubscription}}
+        csmParametersFile: azuredeploy.${{variables.environment}}.parameters.json
+        storageAccount: ${{variables.storageAccount}}
+        azureDeployTimeKeyVaultName: 'DeployTimeKeyVault'
+        azureDeployTimeKeyVaultSubscription: 'DeployTime'
+        deploymentMode: 'Complete'

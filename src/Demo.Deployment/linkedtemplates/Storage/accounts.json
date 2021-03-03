@@ -1,0 +1,47 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "environment": {
+        "type": "string",
+        "allowedValues": ["dev", "test", "acc", "prod"]
+      },
+      "systemName": {
+        "type": "string"
+      }
+    },
+    "variables": {
+      "apiVersionVar": "[providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]]",
+      "storage-account-name": "[concat(parameters('systemName'), parameters('environment'), 'storage')]",
+      "storageAccountSku": "Standard_LRS"
+    },
+    "resources": [
+      {
+        "type": "Microsoft.Storage/storageAccounts",
+        "apiVersion": "[variables('apiVersionVar')]",
+        "name": "[variables('storage-account-name')]",
+        "location": "[resourceGroup().location]",
+        "sku": {
+          "name": "[variables('storageAccountSku')]"
+        },
+        "kind": "StorageV2",
+        "resources": []
+      }
+    ],
+    "outputs": {
+      "ConnectionString": {
+        "type": "string",
+        "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('storage-account-name'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storage-account-name')), variables('apiVersionVar')).keys[0].value)]"
+      },
+      "Config": {
+        "type": "array",
+        "value": [
+          {
+            "name": "AzureWebJobsStorage",
+            "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('storage-account-name'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storage-account-name')), variables('apiVersionVar')).keys[0].value)]"
+          }
+        ]
+      }
+    }
+  }
+  

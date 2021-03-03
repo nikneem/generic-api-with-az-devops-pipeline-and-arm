@@ -1,0 +1,38 @@
+parameters:
+  projectName: '' # Relative path to the project
+  artifactName: 'webapi-package'
+
+
+steps:
+  - task: UseDotNet@2
+    inputs:
+      version: '5.0.x'
+      includePreviewVersions: false # Required for preview versions
+
+  - task: DotNetCoreCLI@2
+    displayName: "Restore Packages"
+    inputs:
+      command: "restore"
+      projects: "**/*.csproj"
+      feedsToUse: "select"
+
+  - task: DotNetCoreCLI@2
+    displayName: "Run unit tests"
+    inputs:
+      command: "test"
+      projects: "src"
+
+  - task: DotNetCoreCLI@2
+    displayName: Publish
+    inputs:
+      command: publish
+      projects: ${{parameters.projectName}}
+      publishWebProjects: True
+      arguments: "--configuration $(BuildConfiguration) --output $(build.artifactstagingdirectory)/${{parameters.artifactName}}"
+      zipAfterPublish: True
+
+  - task: PublishPipelineArtifact@0
+    displayName: "Publish Artifact: ${{parameters.artifactName}}"
+    inputs:
+      artifactName: "${{parameters.artifactName}}"
+      targetPath: "$(Build.ArtifactStagingDirectory)/${{parameters.artifactName}}"

@@ -1,0 +1,502 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "systemName": {
+      "type": "string"
+    },
+    "environment": {
+      "type": "string",
+      "allowedValues": ["dev", "test", "acc", "prod"]
+    },
+    "linkedTemplatesLocation": {
+      "type": "string",
+      "metadata": {
+        "description": "Base URI to linked templates location"
+      }
+    },
+    "linkedTemplatesLocationSasToken": {
+      "type": "string",
+      "metadata": {
+        "description": "SAS token to access linked templates container"
+      }
+    },
+
+    "sqlServerUsername": {
+      "type": "string",
+      "metadata": {
+        "description": "Username to use for SQL Server Login"
+      }
+    },
+    "sqlServerPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Password to use for SQL Server Login"
+      }
+    }
+  },
+  "variables": {
+    "systemName": "[parameters('systemName')]",
+    "environment": "[parameters('environment')]",
+    "sqlServerName": "[concat(parameters('systemName'), '-', parameters('environment'), '-sqlsvr')]",
+    "sqlServerDatabaseName": "[concat(parameters('systemName'), '-', parameters('environment'), '-sqldb')]",
+    "sqlServerUsername": "[parameters('sqlServerUsername')]",
+    "sqlServerPassword": "[parameters('sqlServerPassword')]",
+
+    "appServiceName": "[concat(parameters('systemName'), '-', parameters('environment'), '-app')]",
+
+    "storageAccountLinkedTemplateUrl": "[concat(parameters('linkedTemplatesLocation'), 'Storage/accounts.json', parameters('linkedTemplatesLocationSasToken'))]",
+    "sqlServerLinkedTemplateUrl": "[concat(parameters('linkedTemplatesLocation'), 'Sql/servers.json', parameters('linkedTemplatesLocationSasToken'))]",
+    "sqlServerDatabaseLinkedTemplateUrl": "[concat(parameters('linkedTemplatesLocation'), 'Sql/servers/databases.json', parameters('linkedTemplatesLocationSasToken'))]",
+
+    "keyVaultsLinkedTemplateUrl": "[concat(parameters('linkedTemplatesLocation'), 'KeyVault/vaults.json', parameters('linkedTemplatesLocationSasToken'))]",
+    "keyVaultsAccessPoliciesLinkedTemplateUrl": "[concat(parameters('linkedTemplatesLocation'), 'KeyVault/vaults/accessPolicies.json', parameters('linkedTemplatesLocationSasToken'))]",
+    "keyVaultsSecretsLinkedTemplateUrl": "[concat(parameters('linkedTemplatesLocation'), 'KeyVault/vaults/secrets.json', parameters('linkedTemplatesLocationSasToken'))]",
+
+    "appConfigurationLinkedTemplateUrl": "[concat(parameters('linkedTemplatesLocation'), 'AppConfiguration/configurationStores.json', parameters('linkedTemplatesLocationSasToken'))]",
+    "appConfigurationKeyValuesLinkedTemplateUrl": "[concat(parameters('linkedTemplatesLocation'), 'AppConfiguration/configurationStores/keyValues.json', parameters('linkedTemplatesLocationSasToken'))]",
+
+    "appServiceLinkedTemplateUrl": "[concat(parameters('linkedTemplatesLocation'), 'Web/sites.json', parameters('linkedTemplatesLocationSasToken'))]",
+    "appServicePlanLinkedTemplateUrl": "[concat(parameters('linkedTemplatesLocation'), 'Web/serverfarms.json', parameters('linkedTemplatesLocationSasToken'))]"
+  },
+  "resources": [
+    {
+      "name": "storageAccount",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2019-05-01",
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[variables('storageAccountLinkedTemplateUrl')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "systemName": {
+            "value": "[parameters('systemName')]"
+          },
+          "environment": {
+            "value": "[parameters('environment')]"
+          }
+        }
+      }
+    },
+    {
+      "name": "storageAccountSecret",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2019-05-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'storageAccount')]",
+        "[resourceId('Microsoft.Resources/deployments', 'keyvault')]"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[variables('keyVaultsSecretsLinkedTemplateUrl')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "keyVault": {
+            "value": "[reference('keyvault').outputs.keyvaultName.value]"
+          },
+          "name": {
+            "value": "storageAccountConnectionString"
+          },
+          "value": {
+            "value": "[reference('storageAccount').outputs.ConnectionString.value]"
+          }
+        }
+      }
+    },
+
+    {
+      "name": "keyvault",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2019-05-01",
+      "dependsOn": [],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[variables('keyVaultsLinkedTemplateUrl')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "systemName": {
+            "value": "[parameters('systemName')]"
+          },
+          "environment": {
+            "value": "[parameters('environment')]"
+          }
+        }
+      }
+    },
+
+    {
+      "name": "configurationStores",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2019-05-01",
+      "dependsOn": [],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[variables('appConfigurationLinkedTemplateUrl')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "systemName": {
+            "value": "[parameters('systemName')]"
+          },
+          "environment": {
+            "value": "[parameters('environment')]"
+          }
+        }
+      }
+    },
+
+    {
+      "name": "appServicePlan",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2019-05-01",
+      "dependsOn": [],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[variables('appServicePlanLinkedTemplateUrl')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "systemName": {
+            "value": "[parameters('systemName')]"
+          },
+          "environment": {
+            "value": "[parameters('environment')]"
+          },
+          "kind": {
+            "value": "app"
+          },
+          "skuInfo": {
+            "value": {
+              "name": "B1",
+              "capacity": 1
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "appService",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2019-05-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'appServicePlan')]"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[variables('appServiceLinkedTemplateUrl')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "systemName": {
+            "value": "[parameters('systemName')]"
+          },
+          "environment": {
+            "value": "[parameters('environment')]"
+          }
+        }
+      }
+    },
+
+    {
+      "name": "sqlServer",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2019-05-01",
+      "dependsOn": [],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[variables('sqlServerLinkedTemplateUrl')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "systemName": {
+            "value": "[variables('systemName')]"
+          },
+          "environment": {
+            "value": "[variables('environment')]"
+          },
+          "sqlServerUsername": {
+            "value": "[variables('sqlServerUsername')]"
+          },
+          "sqlServerPassword": {
+            "value": "[variables('sqlServerPassword')]"
+          }
+        }
+      }
+    },
+
+    {
+      "name": "sqlServerDatabase",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2019-05-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'sqlServer')]"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[variables('sqlServerDatabaseLinkedTemplateUrl')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "systemName": {
+            "value": "[variables('systemName')]"
+          },
+          "environment": {
+            "value": "[variables('environment')]"
+          }
+        }
+      }
+    },
+
+    {
+      "name": "sqlServerPassword",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2019-05-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'sqlServer')]",
+        "[resourceId('Microsoft.Resources/deployments', 'keyvault')]"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[variables('keyVaultsSecretsLinkedTemplateUrl')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "keyVault": {
+            "value": "[reference('keyvault').outputs.keyvaultName.value]"
+          },
+          "name": {
+            "value": "SqlServerPassword"
+          },
+          "value": {
+            "value": "[variables('sqlServerPassword')]"
+          }
+        }
+      }
+    },
+    {
+      "name": "sqlConnectionString",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2019-05-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'sqlServer')]",
+        "[resourceId('Microsoft.Resources/deployments', 'keyvault')]"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[variables('keyVaultsSecretsLinkedTemplateUrl')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "keyVault": {
+            "value": "[reference('keyvault').outputs.keyvaultName.value]"
+          },
+          "name": {
+            "value": "sqlConnectionString"
+          },
+          "value": {
+            "value": "[concat('DATA SOURCE=tcp:', variables('sqlServerName'), '.database.windows.net,1433;User ID=', variables('sqlServerUsername'), ';Password=', variables('sqlServerPassword'), ';Initial Catalog=', variables('sqlServerDatabaseName'), ';MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;')]"
+          }
+        }
+      }
+    },
+
+    {
+      "type": "Microsoft.Web/sites/config",
+      "apiVersion": "2018-11-01",
+      "name": "[concat(variables('appServiceName'), '/web')]",
+      "location": "West Europe",
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'appService')]"
+      ],
+      "properties": {
+        "numberOfWorkers": 1,
+        "defaultDocuments": ["index.html"],
+        "netFrameworkVersion": "v5.0",
+        "requestTracingEnabled": false,
+        "remoteDebuggingEnabled": false,
+        "remoteDebuggingVersion": "VS2019",
+        "httpLoggingEnabled": false,
+        "logsDirectorySizeLimit": 35,
+        "detailedErrorLoggingEnabled": false,
+        "publishingUsername": "$confoo-test-app",
+        "azureStorageAccounts": {},
+        "scmType": "None",
+        "use32BitWorkerProcess": true,
+        "webSocketsEnabled": false,
+        "alwaysOn": true,
+        "managedPipelineMode": "Integrated",
+        "virtualApplications": [
+          {
+            "virtualPath": "/",
+            "physicalPath": "site\\wwwroot",
+            "preloadEnabled": true
+          }
+        ],
+        "loadBalancing": "LeastRequests",
+        "experiments": {
+          "rampUpRules": []
+        },
+        "autoHealEnabled": false,
+        "localMySqlEnabled": false,
+        "ipSecurityRestrictions": [
+          {
+            "ipAddress": "Any",
+            "action": "Allow",
+            "priority": 1,
+            "name": "Allow all",
+            "description": "Allow all access"
+          }
+        ],
+        "scmIpSecurityRestrictions": [
+          {
+            "ipAddress": "Any",
+            "action": "Allow",
+            "priority": 1,
+            "name": "Allow all",
+            "description": "Allow all access"
+          }
+        ],
+        "scmIpSecurityRestrictionsUseMain": false,
+        "http20Enabled": true,
+        "minTlsVersion": "1.2",
+        "ftpsState": "Disabled",
+        "reservedInstanceCount": 0
+      }
+    },
+    {
+      "name": "[concat(variables('appServiceName'), '/appsettings')]",
+      "type": "Microsoft.Web/sites/config",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2020-09-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'appService')]"
+      ],
+      "properties": {
+        "WEBSITE_RUN_FROM_PACKAGE": "1",
+        "Configuration:Endpoint": "[reference('configurationStores').outputs.AppConfigEndpoint.value]"
+      }
+    },
+
+    {
+      "name": "keyVaultAppConfigurationPolicy",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2019-05-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'configurationStores')]",
+        "[resourceId('Microsoft.Resources/deployments', 'keyvault')]"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[variables('keyVaultsAccessPoliciesLinkedTemplateUrl')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "keyVaultName": {
+            "value": "[reference('keyvault').outputs.keyvaultName.value]"
+          },
+          "principalId": {
+            "value": "[reference('configurationStores').outputs.PrincipalId.value]"
+          }
+        }
+      }
+    },
+    {
+      "name": "keyVaultAppServicePolicy",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2019-05-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'appService')]",
+        "[resourceId('Microsoft.Resources/deployments', 'keyvault')]"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[variables('keyVaultsAccessPoliciesLinkedTemplateUrl')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "keyVaultName": {
+            "value": "[reference('keyvault').outputs.keyvaultName.value]"
+          },
+          "principalId": {
+            "value": "[reference('appService').outputs.PrincipalId.value]"
+          }
+        }
+      }
+    },
+
+    {
+      "name": "secretConfigurations",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2019-08-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'sqlConnectionString')]",
+        "[resourceId('Microsoft.Resources/deployments', 'storageAccountSecret')]"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[variables('appConfigurationKeyValuesLinkedTemplateUrl')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "systemName": {
+            "value": "[parameters('systemName')]"
+          },
+          "environment": {
+            "value": "[parameters('environment')]"
+          },
+          "settings": {
+            "value": "[union(reference('sqlConnectionString').outputs.Config.value, reference('storageAccountSecret').outputs.Config.value)]"
+          }
+        }
+      }
+    },
+
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2018-09-01-preview",
+      "name": "[guid(resourceGroup().id)]",
+      "properties": {
+        "roleDefinitionId": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Authorization/roleDefinitions/', '516239f1-63e1-4d78-a4de-a74fb236a071')]",
+        "principalId": "[reference('appService').outputs.PrincipalId.value]"
+      }
+    }
+
+
+
+    
+  ],
+  "outputs": {
+    "appServiceName": {
+      "value": "[variables('appServiceName')]",
+      "type": "string"
+    },
+    "sqlServerName": {
+      "value": "[variables('sqlServerName')]",
+      "type": "string"
+    },
+    "sqlDatabaseName": {
+      "value": "[variables('sqlServerDatabaseName')]",
+      "type": "string"
+    },
+    "sqlServerUsername": {
+      "value": "[variables('sqlServerUsername')]",
+      "type": "string"
+    }
+  }
+}

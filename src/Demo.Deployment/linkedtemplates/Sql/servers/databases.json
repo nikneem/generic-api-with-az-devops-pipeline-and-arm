@@ -1,0 +1,42 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environment": {
+      "type": "string",
+      "allowedValues": ["dev", "test", "acc", "prod"]
+    },
+    "systemName": {
+      "type": "string"
+    }
+  },
+  "functions": [],
+  "variables": {
+    "apiVersionVar": "[providers('Microsoft.Sql', 'servers').apiVersions[0]]",
+    "sql-server-name": "[concat(parameters('systemName'), '-', parameters('environment'), '-sqlsvr')]",
+    "database-name": "[concat(parameters('systemName'), '-', parameters('environment'), '-sqldb')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Sql/servers/databases",
+      "apiVersion": "[variables('apiVersionVar')]",
+      "name": "[concat(variables('sql-server-name'), '/', variables('database-name'))]",
+      "location": "[resourceGroup().location]",
+      "sku": {
+        "name": "Standard",
+        "tier": "Standard",
+        "capacity": 10
+      },
+      "kind": "v12.0,user",
+      "properties": {
+        "collation": "SQL_Latin1_General_CP1_CI_AS",
+        "maxSizeBytes": 268435456000,
+        "catalogCollation": "SQL_Latin1_General_CP1_CI_AS",
+        "zoneRedundant": false,
+        "readScale": "Disabled",
+        "storageAccountType": "GRS"
+      }
+    }
+  ],
+  "outputs": {}
+}

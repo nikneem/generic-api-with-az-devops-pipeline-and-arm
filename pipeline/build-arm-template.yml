@@ -1,0 +1,54 @@
+parameters:
+  azureSubscription: ''  # defaults for any parameters that aren't specified
+  resourceGroupName: ''
+  csmParametersFile: '' # a file name with extension
+  storageAccount: '' # The name of an existing storage account within the Azure subscription
+  location: 'West Europe'
+  artifactName: 'arm-templates'
+
+steps:
+  - task: CopyFiles@2
+    displayName: 'Copy Files to: $(Build.ArtifactStagingDirectory)/${{parameters.artifactName}}'
+    inputs:
+      SourceFolder: 'src/Demo.Deployment'
+      Contents: '**\*.json'
+      TargetFolder: '$(Build.ArtifactStagingDirectory)/${{parameters.artifactName}}'
+
+  - task: AzureFileCopy@3
+    displayName: 'Upload ARM linked templates'
+    inputs:
+      azureConnectionType: ConnectedServiceNameARM
+      SourcePath: '$(Build.ArtifactStagingDirectory)/${{parameters.artifactName}}/linkedtemplates'
+      azureSubscription: ${{parameters.azureSubscription}}
+      Destination: 'AzureBlob'
+      storage: ${{parameters.storageAccount}}
+      ContainerName: 'linkedtemplates'
+      outputStorageUri: 'linkedTemplatesLocation'
+      outputStorageContainerSasToken: 'linkedTemplatesLocationSasToken'
+      sasTokenTimeOutInMinutes: '15'
+
+  - task: Npm@1
+    displayName: 'Install JSON Lint'
+    inputs:
+      command: custom
+      customCommand: 'install jsonlint -g'
+
+  - script: 'jsonlint $(Build.ArtifactStagingDirectory)/${{parameters.artifactName}}/azuredeploy.json'
+    displayName: 'Validate ARM Template JSON Schema'
+
+  - task: AzureResourceGroupDeployment@2
+    displayName: 'Validate ARM Template Deployment'
+    inputs:
+      azureSubscription: ${{parameters.azureSubscription}}
+      resourceGroupName: ${{parameters.resourceGroupName}}
+      location: ${{parameters.location}}
+      csmFile: '$(Build.ArtifactStagingDirectory)/${{parameters.artifactName}}/azuredeploy.json'
+      csmParametersFile: '$(Build.ArtifactStagingDirectory)/${{parameters.artifactName}}/${{parameters.csmParametersFile}}'
+      overrideParameters: '-sqlServerPassword "dummyPassword" -linkedTemplatesLocation "$(linkedTemplatesLocation)" -linkedTemplatesLocationSasToken "$(linkedTemplatesLocationSasToken)"'
+      deploymentMode: 'Validation'
+
+  - task: PublishPipelineArtifact@1
+    displayName: 'Publish Pipeline Artifact'
+    inputs:
+      targetPath: '$(Build.ArtifactStagingDirectory)/${{parameters.artifactName}}'
+      artifact: '${{parameters.artifactName}}'

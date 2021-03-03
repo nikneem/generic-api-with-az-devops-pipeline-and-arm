@@ -1,0 +1,50 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+      "systemName": {
+          "type": "string"
+      },
+      "environment": {
+          "type": "string",
+          "allowedValues": ["dev", "test", "acc", "prod"]
+      },
+      "skuInfo": {
+          "type": "object",
+          "defaultValue": {
+              "name": "F1",
+              "capacity": 0
+          }
+      },
+      "kind": {
+        "type": "string",
+        "allowedValues": [
+          "functionapp",
+          "linux",
+          "app"
+        ],
+        "defaultValue": "app"
+      }
+  },
+  "functions": [],
+  "variables": {
+      "app-service-plan-name": "[concat(parameters('systemName'), '-', parameters('environment'), '-plan')]"
+  },
+  "resources": [
+    {
+      "name": "[variables('app-service-plan-name')]",
+      "type": "Microsoft.Web/serverfarms",
+      "apiVersion": "2018-02-01",
+      "location": "[resourceGroup().location]",
+      "kind": "[parameters('kind')]",
+      "sku": {
+        "name": "[parameters('skuInfo').name]",
+        "capacity": "[parameters('skuInfo').capacity]"
+      },
+      "properties": {
+        "name": "[variables('app-service-plan-name')]"
+      }
+    }
+  ],
+  "outputs": {}
+}

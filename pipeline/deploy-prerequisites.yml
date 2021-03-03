@@ -1,0 +1,17 @@
+parameters:
+  azureSubscription: ''  # defaults for any parameters that aren't specified
+  resourceGroupName: ''
+  storageAccount: '' # The name of an existing storage account within the Azure subscription
+  location: 'West Europe'
+  artifactName: 'arm-templates'
+
+steps:
+  - task: AzureResourceGroupDeployment@2
+    displayName: 'Create storage account'
+    inputs:
+      azureSubscription: ${{parameters.azureSubscription}}
+      resourceGroupName: ${{parameters.resourceGroupName}}
+      location: "West Europe"
+      csmFile: "src/Demo.Deployment/prerequisites.json"
+      overrideParameters: '-storageAccountName "${{parameters.storageAccount}}"'
+      deploymentMode: "Incremental"

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environment": {
+      "type": "string",
+      "allowedValues": ["dev", "test", "acc", "prod"]
+    },
+    "systemName": {
+      "type": "string"
+    }
+  },
+  "variables": {
+    "apiVersionVar": "[providers('Microsoft.KeyVault', 'vaults').apiVersions[0]]",
+    "keyvault-name": "[concat(parameters('systemName'), '-', parameters('environment'), '-keyvault')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.KeyVault/vaults",
+      "apiVersion": "[variables('apiVersionVar')]",
+      "name": "[variables('keyvault-name')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "sku": {
+          "family": "A",
+          "name": "Standard"
+        },
+        "tenantId": "[subscription().tenantId]",
+        "accessPolicies": [],
+        "enableSoftDelete": true
+      }
+    }
+  ],
+  "outputs": {
+    "keyvaultName": {
+      "type": "string",
+      "value": "[variables('keyvault-name')]"
+    }
+  }
+}

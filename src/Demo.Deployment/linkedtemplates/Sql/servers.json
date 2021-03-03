@@ -1,0 +1,56 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environment": {
+      "type": "string",
+      "allowedValues": ["dev", "test", "acc", "prod"]
+    },
+    "systemName": {
+      "type": "string"
+    },
+    "sqlServerUsername": {
+      "type": "string"
+    },
+    "sqlServerPassword": {
+      "type": "securestring"
+    }
+  },
+  "variables": {
+    "apiVersionVar": "[providers('Microsoft.Sql', 'servers').apiVersions[0]]",
+    "sql-server-name": "[concat(parameters('systemName'), '-', parameters('environment'), '-sqlsvr')]",
+    "sqlServerUsername": "[parameters('sqlServerUsername')]",
+    "sqlServerPassword": "[parameters('sqlServerPassword')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Sql/servers",
+      "apiVersion": "[variables('apiVersionVar')]",
+      "name": "[variables('sql-server-name')]",
+      "location": "[resourceGroup().location]",
+      "kind": "v12.0",
+      "properties": {
+        "administratorLogin": "[variables('sqlServerUsername')]",
+        "administratorLoginPassword": "[variables('sqlServerPassword')]",
+        "version": "12.0",
+        "publicNetworkAccess": "Enabled"
+      },
+      "resources": [
+        {
+          "type": "firewallRules",
+          "apiVersion": "2015-05-01-preview",
+          "name": "AllowAllAzureIps",
+          "location": "[resourceGroup().location]",
+          "dependsOn": [
+            "[resourceId('Microsoft.Sql/servers', variables('sql-server-name'))]"
+          ],
+          "properties": {
+            "startIpAddress": "0.0.0.0",
+            "endIpAddress": "0.0.0.0"
+          }
+        }
+      ]
+    }
+  ],
+  "outputs": {}
+}

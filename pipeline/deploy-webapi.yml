@@ -1,0 +1,20 @@
+parameters:
+  azureSubscription: ''  # defaults for any parameters that aren't specified
+  webAppName: '' # The name of an existing storage account within the Azure subscription
+  artifactName: 'webapi-package'
+
+steps:
+  - task: DownloadPipelineArtifact@0
+    displayName: "Download Artifact: ${{parameters.artifactName}}"
+    inputs:
+      artifactName: "${{parameters.artifactName}}"
+      targetPath: $(System.DefaultWorkingDirectory)/${{parameters.artifactName}}
+
+  - task: AzureRmWebAppDeployment@4
+    displayName: "API App Deploy: Web API"
+    inputs:
+      azureSubscription: "${{parameters.azureSubscription}}"
+      appType: web
+      webAppName: "${{parameters.webAppName}}"
+      package: '$(System.DefaultWorkingDirectory)\${{parameters.artifactName}}\*.zip'
+      deploymentMode: runFromPackage

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "systemName": {
+      "type": "string"
+    },
+    "environment": {
+      "type": "string",
+      "allowedValues": ["dev", "test", "acc", "prod"]
+    },
+    "kind": {
+      "type": "string",
+      "allowedValues": ["functionapp", "linux", "app"],
+      "defaultValue": "app"
+    }
+  },
+  "variables": {
+    "app-service-plan-name": "[concat(parameters('systemName'), '-', parameters('environment'), '-plan')]",
+    "app-service-name": "[concat(parameters('systemName'), '-', parameters('environment'), '-app')]"
+  },
+  "resources": [
+    {
+      "name": "[variables('app-service-name')]",
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2018-11-01",
+      "location": "[resourceGroup().location]",
+      "kind": "[parameters('kind')]",
+      "properties": {
+        "name": "[variables('app-service-name')]",
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('app-service-plan-name'))]"
+      },
+      "identity": {
+        "type": "SystemAssigned"
+      }
+    }
+  ],
+  "outputs": {
+    "appServiceName": {
+      "type": "string",
+      "value": "[variables('app-service-name')]"
+    },
+    "PrincipalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Web/sites', variables('app-service-name')), '2018-11-01', 'Full').identity.principalId]"
+    }
+  }
+}

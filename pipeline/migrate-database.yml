@@ -1,0 +1,51 @@
+parameters:
+  azureSubscription: ''  # defaults for any parameters that aren't specified
+  resourceGroupName: ''
+  azureDeployTimeKeyVaultName: ''
+  azureDeployTimeKeyVaultSubscription: ''
+  artifactName: 'migrations-package'
+
+steps:
+  - task: DownloadPipelineArtifact@0
+    displayName: "Download Artifact: ${{parameters.artifactName}}"
+    inputs:
+      artifactName: "${{parameters.artifactName}}"
+      targetPath: $(System.DefaultWorkingDirectory)/${{parameters.artifactName}}
+
+  - task: AzureKeyVault@1
+    displayName: 'Get secrets from deploy-time KeyVault'
+    inputs:
+      azureSubscription: '${{parameters.azureDeployTimeKeyVaultSubscription}}'
+      KeyVaultName: '${{parameters.azureDeployTimeKeyVaultName}}'
+      SecretsFilter: 'SqlServerPassword'
+
+  - task: 'ARM Outputs@6'
+    displayName: 'Fetch ARM Outputs'
+    inputs:
+      ConnectedServiceNameARM: "${{parameters.azureSubscription}}"
+      resourceGroupName: "${{parameters.resourceGroupName}}"
+      prefix: 'ARMOutputs.'
+
+  - task: PowerShell@2
+    displayName: "Migrate database"
+    inputs:
+      targetType: "inline"
+      failOnStderr: true
+      script: |
+        Write-Host "Executing command: $(System.DefaultWorkingDirectory)\${{parameters.artifactName}}\Demo.DataMigration\Demo.DataMigration.exe migrate"
+        $(System.DefaultWorkingDirectory)\${{parameters.artifactName}}\Demo.DataMigration\Demo.DataMigration.exe migrate -n "$(ARMOutputs.sqlDatabaseName)" -s "$(ARMOutputs.sqlServerName)" -u "$(ARMOutputs.sqlServerUsername)" -p "$(SqlServerPassword)"
+        if ($LASTEXITCODE -ne 0) { 
+          exit $LASTEXITCODE
+        }
+
+  - task: PowerShell@2
+    displayName: "Seed database"
+    inputs:
+      targetType: "inline"
+      failOnStderr: true
+      script: |
+        Write-Host "Executing command: $(System.DefaultWorkingDirectory)\${{parameters.artifactName}}\Demo.DataMigration\Demo.DataMigration.exe seed"
+        $(System.DefaultWorkingDirectory)\${{parameters.artifactName}}\Demo.DataMigration\Demo.DataMigration.exe seed -n "$(ARMOutputs.sqlDatabaseName)" -s "$(ARMOutputs.sqlServerName)" -u "$(ARMOutputs.sqlServerUsername)" -p "$(SqlServerPassword)"
+        if ($LASTEXITCODE -ne 0) { 
+          exit $LASTEXITCODE
+        }
